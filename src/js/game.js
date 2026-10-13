@@ -1,6 +1,6 @@
 // game.js
 // Estado y reglas. Depende de globals de maze.js: MAZE, TUNNEL_ROW,
-// PACMAN_START, GHOST_STARTS.
+// PACMAN_START, GHOST_STARTS, GHOST_EXIT.
 
 const DIRS = {
   left: { x: -1, y: 0 },
@@ -12,6 +12,25 @@ const OPPOSITE = { left: 'right', right: 'left', up: 'down', down: 'up' };
 
 const PACMAN_SPEED = 0.125; // 1/8 celda/frame -> alinea cada 8 frames
 const GHOST_SPEED = 0.1;    // 1/10 celda/frame
+
+// Salida escalonada del pen (en frames a 60fps).
+const GHOST_EXIT_TIMERS = { blinky: 0, pinky: 30, inky: 180, clyde: 360 };
+const HOUSE_TOP = 13.5;
+const HOUSE_BOTTOM = 14.5;
+
+function makeGhost( g ) {
+  const timer = GHOST_EXIT_TIMERS[ g.kind ] || 0;
+  return {
+    x: g.x,
+    y: g.y,
+    homeX: g.x,
+    dir: 'up',
+    speed: GHOST_SPEED,
+    kind: g.kind,
+    state: timer <= 0 ? 'leaving' : 'house',
+    exitTimer: timer,
+  };
+}
 
 // Crea una partida nueva. Copia MAZE (pristino) a game.grid para poder comer
 // dots sin destruir el original, y reiniciar.
@@ -36,13 +55,7 @@ function createGame() {
       nextDir: null,
       speed: PACMAN_SPEED,
     },
-    ghosts: GHOST_STARTS.map( ( g ) => ( {
-      x: g.x,
-      y: g.y,
-      dir: 'up',
-      speed: GHOST_SPEED,
-      kind: g.kind,
-    } ) ),
+    ghosts: GHOST_STARTS.map( makeGhost ),
   };
 }
 
@@ -165,6 +178,47 @@ function decideGhost( game, g ) {
   }
 }
 
+// Rebote vertical dentro del pen + salida guionada por la puerta.
+// Ignora decideGhost: el chase tira hacia abajo y nunca elegiria subir.
+function moveHouseGhost( g ) {
+  if ( g.state === 'house' ) {
+    if ( g.exitTimer > 0 ) g.exitTimer--;
+    if ( g.exitTimer <= 0 ) {
+      g.state = 'leaving';
+      return;
+    }
+    g.x = g.homeX;
+    if ( g.dir !== 'up' && g.dir !== 'down' ) g.dir = 'up';
+    const d = DIRS[ g.dir ];
+    g.y += d.y * g.speed;
+    if ( g.y <= HOUSE_TOP ) {
+      g.y = HOUSE_TOP;
+      g.dir = 'down';
+    } else if ( g.y >= HOUSE_BOTTOM ) {
+      g.y = HOUSE_BOTTOM;
+      g.dir = 'up';
+    }
+    return;
+  }
+
+  // leaving: centra en x de salida y sube hasta GHOST_EXIT.
+  const targetX = GHOST_EXIT.x;
+  if ( Math.abs( g.x - targetX ) > g.speed / 2 ) {
+    g.dir = g.x < targetX ? 'right' : 'left';
+    g.x += ( g.x < targetX ? 1 : -1 ) * g.speed;
+    return;
+  }
+  g.x = targetX;
+  g.dir = 'up';
+  g.y -= g.speed;
+  if ( g.y <= GHOST_EXIT.y ) {
+    g.x = GHOST_EXIT.x;
+    g.y = GHOST_EXIT.y;
+    g.state = 'outside';
+    g.dir = 'left';
+  }
+}
+
 function moveGhost( game, g ) {
   const grid = game.grid;
   const width = grid[ 0 ].length;
@@ -189,9 +243,13 @@ function resetPositions( game ) {
   p.dir = 'left';
   p.nextDir = null;
   game.ghosts.forEach( ( g, i ) => {
-    g.x = GHOST_STARTS[ i ].x;
-    g.y = GHOST_STARTS[ i ].y;
-    g.dir = 'up';
+    const fresh = makeGhost( GHOST_STARTS[ i ] );
+    g.x = fresh.x;
+    g.y = fresh.y;
+    g.homeX = fresh.homeX;
+    g.dir = fresh.dir;
+    g.state = fresh.state;
+    g.exitTimer = fresh.exitTimer;
   } );
 }
 
@@ -201,7 +259,10 @@ function collides( a, b ) {
 
 function update( game ) {
   movePacman( game );
-  game.ghosts.forEach( ( g ) => moveGhost( game, g ) );
+  game.ghosts.forEach( ( g ) => {
+    if ( g.state === 'outside' ) moveGhost( game, g );
+    else moveHouseGhost( g );
+  } );
 
   for ( const g of game.ghosts ) {
     if ( collides( game.pacman, g ) ) {
