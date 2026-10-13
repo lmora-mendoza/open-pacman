@@ -110,6 +110,22 @@ function movePacman( game ) {
   wrapTunnel( p, width );
 }
 
+// Elige el candidato que minimiza la distancia Manhattan al target.
+// Empates: primer candidato en orden left, right, up, down.
+function pickChase( g, choices, tx, ty ) {
+  let best = choices[ 0 ];
+  let bestDist = Infinity;
+  for ( const dir of choices ) {
+    const d = DIRS[ dir ];
+    const dist = Math.abs( g.x + d.x - tx ) + Math.abs( g.y + d.y - ty );
+    if ( dist < bestDist ) {
+      bestDist = dist;
+      best = dir;
+    }
+  }
+  return best;
+}
+
 function decideGhost( game, g ) {
   const grid = game.grid;
   const p = game.pacman;
@@ -120,22 +136,30 @@ function decideGhost( game, g ) {
   // Sin salida (callejon): permitir el giro de 180.
   const choices = options.length ? options : [ '' + OPPOSITE[ g.dir ] ];
 
-  if ( g.kind === 'hunter' ) {
-    const px = Math.round( p.x );
-    const py = Math.round( p.y );
-    let best = choices[ 0 ];
-    let bestDist = Infinity;
-    for ( const dir of choices ) {
-      const d = DIRS[ dir ];
-      const nx = g.x + d.x;
-      const ny = g.y + d.y;
-      const dist = Math.abs( nx - px ) + Math.abs( ny - py );
-      if ( dist < bestDist ) {
-        bestDist = dist;
-        best = dir;
-      }
+  if ( g.kind === 'blinky' ) {
+    g.dir = pickChase( g, choices, Math.round( p.x ), Math.round( p.y ) );
+  } else if ( g.kind === 'pinky' ) {
+    // Embosca 4 celdas por delante de Pac-Man.
+    const d = DIRS[ p.dir ] || { x: 0, y: 0 };
+    g.dir = pickChase( g, choices, Math.round( p.x ) + 4 * d.x, Math.round( p.y ) + 4 * d.y );
+  } else if ( g.kind === 'inky' ) {
+    // Flanquea: refleja a blinky sobre el punto 2 celdas delante de Pac-Man.
+    const d = DIRS[ p.dir ] || { x: 0, y: 0 };
+    const pivotX = Math.round( p.x ) + 2 * d.x;
+    const pivotY = Math.round( p.y ) + 2 * d.y;
+    const blinky = game.ghosts.find( ( h ) => h.kind === 'blinky' );
+    const bx = blinky ? Math.round( blinky.x ) : g.x;
+    const by = blinky ? Math.round( blinky.y ) : g.y;
+    g.dir = pickChase( g, choices, 2 * pivotX - bx, 2 * pivotY - by );
+  } else if ( g.kind === 'clyde' ) {
+    // Cauteloso: persigue lejos, vaga cerca (umbral 8 celdas Manhattan).
+    const dist = Math.abs( Math.round( g.x ) - Math.round( p.x ) ) +
+      Math.abs( Math.round( g.y ) - Math.round( p.y ) );
+    if ( dist > 8 ) {
+      g.dir = pickChase( g, choices, Math.round( p.x ), Math.round( p.y ) );
+    } else {
+      g.dir = choices[ Math.floor( Math.random() * choices.length ) ];
     }
-    g.dir = best;
   } else {
     g.dir = choices[ Math.floor( Math.random() * choices.length ) ];
   }
