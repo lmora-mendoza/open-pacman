@@ -2,12 +2,13 @@
 // Laberinto 28x31 fiel a la geometria del nivel 1 de Pac-Man.
 // Se escribe como 31 strings de 28 chars (legible) y se parsea a numeros.
 //   '#' pared(1) · '.' dot(2) · ' ' vacio transitable(0) · '-' puerta pen(3)
+//   'o' power pellet(4)
 // Coordenadas: celda (x,y), origen arriba-izquierda. x in [0,27], y in [0,30].
 // Simetrico respecto al eje vertical central (entre cols 13 y 14).
 
 const MAZE_STR = [
   '############################', // 0  borde
-  '#............##............#', // 1
+  '#o...........##...........o#', // 1  pellets en x=1,26
   '#.####.#####.##.#####.####.#', // 2
   '#.####.#####.##.#####.####.#', // 3
   '#.####.#####.##.#####.####.#', // 4
@@ -35,7 +36,7 @@ const MAZE_STR = [
   '#......##....##....##......#', // 26
   '#.##########.##.##########.#', // 27
   '#.##########.##.##########.#', // 28
-  '#..........................#', // 29
+  '#o...........##...........o#', // 29 pellets en x=1,26
   '############################', // 30  borde
 ];
 
@@ -43,6 +44,7 @@ function parseTile( ch ) {
   if ( ch === '#' ) return 1;
   if ( ch === '.' ) return 2;
   if ( ch === '-' ) return 3;
+  if ( ch === 'o' ) return 4;
   return 0; // espacio = vacio transitable
 }
 
@@ -51,6 +53,13 @@ const MAZE = MAZE_STR.map( ( row ) => row.split( '' ).map( parseTile ) );
 
 const TUNNEL_ROW = 14;
 const PACMAN_START = { x: 13, y: 23 };
+// Celdas de power pellet (valor 4 en el grid). Una por esquina.
+const POWER_PELLETS = [
+  { x: 1, y: 1 },
+  { x: 26, y: 1 },
+  { x: 1, y: 29 },
+  { x: 26, y: 29 },
+];
 // Celda libre justo arriba de la puerta (puerta en y=12, x=13-14).
 const GHOST_EXIT = { x: 13, y: 11 };
 const GHOST_STARTS = [
@@ -63,5 +72,6 @@ const GHOST_STARTS = [
 window.MAZE = MAZE;
 window.TUNNEL_ROW = TUNNEL_ROW;
 window.PACMAN_START = PACMAN_START;
+window.POWER_PELLETS = POWER_PELLETS;
 window.GHOST_EXIT = GHOST_EXIT;
 window.GHOST_STARTS = GHOST_STARTS;

@@ -1,6 +1,6 @@
 # SPEC 02 — Power pellets en esquinas con modo frightened
 
-> **Status:** Approved
+> **Status:** Implemented
 > **Depends on:** SPEC 01
 > **Date:** 2026-10-13
 > **Objective:** Agregar 4 power pellets (una por esquina) que activan 6s de modo frightened con fantasmas azules comibles y combo de puntos.

@@ -12,6 +12,9 @@ const OPPOSITE = { left: 'right', right: 'left', up: 'down', down: 'up' };
 
 const PACMAN_SPEED = 0.125; // 1/8 celda/frame -> alinea cada 8 frames
 const GHOST_SPEED = 0.1;    // 1/10 celda/frame
+const FRIGHTENED_SPEED = 0.05; // mitad de velocidad en frightened
+const FRIGHTENED_DURATION = 360; // 6s a 60fps
+const FRIGHTENED_FLASH = 60;    // ultimos frames: parpadeo blanco
 
 // Salida escalonada del pen (en frames a 60fps).
 const GHOST_EXIT_TIMERS = { blinky: 0, pinky: 30, inky: 180, clyde: 360 };
@@ -47,6 +50,8 @@ function createGame() {
     score: 0,
     lives: 3,
     dotsRemaining: dots,
+    frightenedTimer: 0,
+    ghostCombo: 0,
     grid,
     pacman: {
       x: PACMAN_START.x,
@@ -107,11 +112,17 @@ function movePacman( game ) {
       p.dir = p.nextDir;
       p.nextDir = null;
     }
-    // Comer dot.
+    // Comer dot o power pellet (la pellet reemplaza al dot: tambien cuenta).
     if ( grid[ p.y ][ p.x ] === 2 ) {
       grid[ p.y ][ p.x ] = 0;
       game.score += 10;
       game.dotsRemaining--;
+    } else if ( grid[ p.y ][ p.x ] === 4 ) {
+      grid[ p.y ][ p.x ] = 0;
+      game.score += 50;
+      game.dotsRemaining--;
+      game.frightenedTimer = FRIGHTENED_DURATION;
+      game.ghostCombo = 0;
     }
     // Si no puede seguir, se detiene en la celda.
     if ( !canMove( grid, p.x, p.y, p.dir, 'pacman' ) ) return;
@@ -148,6 +159,12 @@ function decideGhost( game, g ) {
   );
   // Sin salida (callejon): permitir el giro de 180.
   const choices = options.length ? options : [ '' + OPPOSITE[ g.dir ] ];
+
+  // Asustado: vagar al azar (comible, sin punteria).
+  if ( game.frightenedTimer > 0 ) {
+    g.dir = choices[ Math.floor( Math.random() * choices.length ) ];
+    return;
+  }
 
   if ( g.kind === 'blinky' ) {
     g.dir = pickChase( g, choices, Math.round( p.x ), Math.round( p.y ) );
@@ -231,8 +248,9 @@ function moveGhost( game, g ) {
   }
 
   const d = DIRS[ g.dir ];
-  g.x += d.x * g.speed;
-  g.y += d.y * g.speed;
+  const step = game.frightenedTimer > 0 ? FRIGHTENED_SPEED : g.speed;
+  g.x += d.x * step;
+  g.y += d.y * step;
   wrapTunnel( g, width );
 }
 
@@ -242,6 +260,9 @@ function resetPositions( game ) {
   p.y = PACMAN_START.y;
   p.dir = 'left';
   p.nextDir = null;
+  // Morir corta el frightened.
+  game.frightenedTimer = 0;
+  game.ghostCombo = 0;
   game.ghosts.forEach( ( g, i ) => {
     const fresh = makeGhost( GHOST_STARTS[ i ] );
     g.x = fresh.x;
@@ -257,8 +278,36 @@ function collides( a, b ) {
   return Math.abs( a.x - b.x ) < 0.5 && Math.abs( a.y - b.y ) < 0.5;
 }
 
+// Come un fantasma asustado: combo 200/400/800/1600 y reingresa a la pen.
+function eatGhost( game, g ) {
+  game.score += 200 * Math.pow( 2, Math.min( game.ghostCombo, 3 ) );
+  game.ghostCombo++;
+  const spawn = GHOST_STARTS.find( ( s ) => s.kind === g.kind ) || GHOST_STARTS[ 0 ];
+  g.x = spawn.x;
+  g.y = spawn.y;
+  g.homeX = spawn.x;
+  g.dir = 'up';
+  g.state = 'leaving';
+  g.exitTimer = 0;
+}
+
+// Re-alinea al grid de 0.1 para que los pasos de GHOST_SPEED vuelvan
+// a caer en enteros y aligned() dispare las decisiones de giro.
+function snapGhost( g ) {
+  if ( g.state !== 'outside' ) return;
+  g.x = Math.round( g.x * 10 ) / 10;
+  g.y = Math.round( g.y * 10 ) / 10;
+}
+
 function update( game ) {
   movePacman( game );
+  if ( game.frightenedTimer > 0 ) {
+    game.frightenedTimer--;
+    // Al expirar, la velocidad vuelve de 0.05 a 0.1: sin snap, un offset
+    // de 0.05 hace que aligned() no dispare jamas y el fantasma camine
+    // recto a traves de muros. Snap maximo de 1px, seguro en pasillo.
+    if ( game.frightenedTimer === 0 ) game.ghosts.forEach( snapGhost );
+  }
   game.ghosts.forEach( ( g ) => {
     if ( g.state === 'outside' ) moveGhost( game, g );
     else moveHouseGhost( g );
@@ -266,6 +315,10 @@ function update( game ) {
 
   for ( const g of game.ghosts ) {
     if ( collides( game.pacman, g ) ) {
+      if ( game.frightenedTimer > 0 ) {
+        eatGhost( game, g );
+        continue;
+      }
       game.lives--;
       if ( game.lives <= 0 ) {
         game.state = 'lost';
@@ -282,3 +335,4 @@ function update( game ) {
 window.createGame = createGame;
 window.update = update;
 window.DIRS = DIRS;
+window.FRIGHTENED_FLASH = FRIGHTENED_FLASH;

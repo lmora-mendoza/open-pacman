@@ -66,14 +66,21 @@ function drawDoor( ctx, grid ) {
   ctx.stroke();
 }
 
-function drawDots( ctx, grid ) {
+function drawDots( ctx, grid, frame ) {
   ctx.fillStyle = DOT_COLOR;
   for ( let y = 0; y < grid.length; y++ ) {
     for ( let x = 0; x < grid[ 0 ].length; x++ ) {
-      if ( grid[ y ][ x ] !== 2 ) continue;
+      const v = grid[ y ][ x ];
+      if ( v !== 2 && v !== 4 ) continue;
       const { cx, cy } = cellCenter( x, y );
       ctx.beginPath();
-      ctx.arc( cx, cy, 2.5, 0, Math.PI * 2 );
+      if ( v === 4 ) {
+        // Pellet grande con parpadeo.
+        if ( Math.floor( frame / 15 ) % 2 !== 0 ) continue;
+        ctx.arc( cx, cy, 6, 0, Math.PI * 2 );
+      } else {
+        ctx.arc( cx, cy, 2.5, 0, Math.PI * 2 );
+      }
       ctx.fill();
     }
   }
@@ -151,6 +158,19 @@ const GHOST_COLORS = {
   clyde: '#ffb852',
 };
 
+const FRIGHTENED_BLUE = '#2121de';
+const FRIGHTENED_WHITE = '#ffffff';
+
+// Color del fantasma: azul en frightened, flash blanco al final.
+function ghostColor( game, g, frame ) {
+  if ( game.frightenedTimer <= 0 ) return GHOST_COLORS[ g.kind ] || '#ff0000';
+  const flash = typeof FRIGHTENED_FLASH !== 'undefined' ? FRIGHTENED_FLASH : 60;
+  if ( game.frightenedTimer < flash && Math.floor( frame / 10 ) % 2 === 0 ) {
+    return FRIGHTENED_WHITE;
+  }
+  return FRIGHTENED_BLUE;
+}
+
 function draw( ctx, game, frame ) {
   const grid = game.grid;
   const W = grid[ 0 ].length;
@@ -161,9 +181,9 @@ function draw( ctx, game, frame ) {
 
   drawWalls( ctx, grid );
   drawDoor( ctx, grid );
-  drawDots( ctx, grid );
+  drawDots( ctx, grid, frame );
   drawPacman( ctx, game.pacman, frame );
-  game.ghosts.forEach( ( g ) => drawGhost( ctx, g, GHOST_COLORS[ g.kind ] || '#ff0000' ) );
+  game.ghosts.forEach( ( g ) => drawGhost( ctx, g, ghostColor( game, g, frame ) ) );
   drawHUD( ctx, game, W );
 }
 
